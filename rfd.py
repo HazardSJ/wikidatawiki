@@ -18,30 +18,29 @@ archiveheader = u"{{Archive|category=Archived requests for deletion}}"
 
 page.purgeCache()
 
-#  Not yet implemented
-monthmessages = ['january', 'february', 'march', 'april', 'may_long', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
-months = list()
-monthregex = u"("
-for monthmessage in monthmessages:
-    month = site.mediawiki_message(monthmessage)
-    months.append(month)
-    monthregex += u"%s|" % month
-monthregex += u"\b)"
+##  Not yet used
+#monthmessages = ['january', 'february', 'march', 'april', 'may_long', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+#months = list()
+#monthregex = u"("
+#for monthmessage in monthmessages:
+#    month = site.mediawiki_message(monthmessage)
+#    months.append(month)
+#    monthregex += u"%s|" % month
+#monthregex += u"\b)"
 
 def main():
     try:
-        if page.getSections(minLevel=2) == []:
+        if not page.getSections(minLevel=2):
             print "There are no requests to check."
             return
     except:
         pass
     text        = page.get()
-    pageheader  = re.findall(u".*\n= \{\{.*?\}\} =\n.*?\n<!-- .*? -->", text, re.S)[0]
+    pageheader  = re.findall(u".*<!-- Please leave the header .*? -->", text, re.S)[0]
     allrequests = re.findall(u"== *\[\[.*", text, re.S)[0]
-    allrequests = re.sub(u"\n==", u"\n\n==", allrequests, re.S)
     allrequests = re.sub(u"\n\n+", u"\n\n", allrequests, re.S)
-    allrequests = re.sub(u"\n==", u"\n\n==", allrequests, re.S)
-    allrequests = re.sub(u"== *\[\[(?P<header>.*?)\]\] *== *\n", u"== [[\g<header>]] ==\n", allrequests)
+    #allrequests = re.sub(u"\n==", u"\n\n\n==", allrequests, re.S)
+    allrequests = re.sub(u"\n+== *\[\[(?P<header>.*?)\]\] *==\s*\n+", u"\n\n\n== [[\g<header>]] ==\n", allrequests)
     requests = allrequests.split(u"\n\n\n")
     forarchive = list()
     notforarchive = list()
@@ -49,10 +48,12 @@ def main():
     now = time.mktime(time.gmtime())
     timediff = float(1 * 60 * 60)
     for request in requests:
-        timestamps = list()
         timestamps = re.findall(u"\d{1,2}:\d{2},\s\d{1,2}\s\D{3,9}\s\d{4}\s\(UTC\)", request, re.S)
         timestamps = sorted([time.mktime(time.strptime(timestamp[:-6], "%H:%M, %d %B %Y")) for timestamp in timestamps])
-        ts = timestamps[-1]
+        try:
+            ts = timestamps[-1]
+        except IndexError:
+            notforarchive.append(request)
         if re.search(u"\{\{((not )?(done|deleted)|didn\'t delete)(\|.*?)?\}\}", request, re.I) and ((now - ts) > timediff):
             forarchive.append(request)
             toarchive = True
@@ -69,7 +70,7 @@ def main():
         else:
             archivetext = archiveheader
         for section in forarchive:
-            archivetext += u"\n\n" + section
+            archivetext += u"\n\n\n" + section
         archivecount = len(forarchive)
         if archivecount == 1:
             pagesummary = u"Bot: Archiving %i request to [[%s]]" % (archivecount, archive.title())
@@ -86,10 +87,11 @@ def main():
             'usprop': 'groups'
             }
         pageversionusergroups = query.GetData(params, site)['query']['users'][0]['groups']
-        if u"sysop" in pageversionusergroups:
-            pagesummary += u" (previous edit at %s by [[User:%s|%s]] (administrator): '%s')" % (pageversion[1], pageversionuser, pageversionuser, pageversion[3])
-        else:
-            pagesummary += u" (previous edit at %s by [[User:%s|%s]]: '%s')" % (pageversion[1], pageversionuser, pageversionuser, pageversion[3])
+        if site.loggedInAs() != pageversionuser:
+            if u"sysop" in pageversionusergroups:
+                pagesummary += u" (previous edit at %s by [[User:%s|%s]] (administrator): '%s')" % (pageversion[1], pageversionuser, pageversionuser, pageversion[3])
+            else:
+                pagesummary += u" (previous edit at %s by [[User:%s|%s]]: '%s')" % (pageversion[1], pageversionuser, pageversionuser, pageversion[3])
         print pagesummary
         page.put(pagetext, comment = pagesummary)
         archive.put(archivetext, comment = archivesummary)
